@@ -4,7 +4,7 @@ import configparser
 from typing import List, Tuple, Optional
 
 import caldav
-
+from caldav.objects import Todo
 # --- Configuration and CalDAV Logic ---
 
 def load_config() -> Optional[Tuple[str, str, str, str]]:
@@ -23,9 +23,9 @@ def load_config() -> Optional[Tuple[str, str, str, str]]:
 
 def fetch_tasks(
     url: str, username: str, password: str, calendar_name: str
-) -> List[str]:
+) -> List[Todo]:
     """Fetches task summaries from a specific CalDAV calendar."""
-    task_summaries: List[str] = []
+    tasks: List[Todo] = []
     try:
         with caldav.DAVClient(
             url=url, username=username, password=password
@@ -45,10 +45,10 @@ def fetch_tasks(
             # Fetch tasks only from the target calendar
             for task in target_calendar.todos(include_completed=False):
                 if hasattr(task.vobject_instance, 'vtodo') and hasattr(task.vobject_instance.vtodo, 'summary') and task.vobject_instance.vtodo.status.value == 'NEEDS-ACTION':
-                    summary = task.vobject_instance.vtodo.summary.value
-                    task_summaries.append(str(summary))
+                    #summary = task.vobject_instance.vtodo.summary.value
+                    tasks.append(task)
         
-        return task_summaries
+        return tasks
     except Exception as e:
         return [f"Error: {e}"]
 
@@ -60,19 +60,41 @@ class CalDavApp:
         self.root = root
         self.root.title("CalDAV Tasks")
         self.root.geometry("400x500")
-
+        self.task_objects: [Todo] = []
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         self.task_listbox = tk.Listbox(main_frame)
         self.task_listbox.pack(pady=5, fill=tk.BOTH, expand=True)
 
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(5, 0))
+
+        complete_button = ttk.Button(button_frame, text="Complete Selected Task", command=self.complete_task)
+        complete_button.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5,0))
         refresh_button = ttk.Button(
             main_frame, text="Refresh Tasks", command=self.refresh_tasks
         )
         refresh_button.pack(fill=tk.X)
 
         self.refresh_tasks()
+
+    def complete_task(self) -> None:
+        """Marks the selected task as complete and saves it to the server."""
+        selected_indices = self.task_listbox.curselection()
+        if not selected_indices:
+            messagebox.showinfo("No Selection", "Please select a task to complete.")
+            return
+
+        index = selected_indices[0]
+        task_to_complete = self.task_objects[index]
+
+        try:
+            task_to_complete.complete()  # This sets status, completed-date, etc.
+            task_to_complete.save()
+            self.refresh_tasks()
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not complete task: {e}")
 
     def refresh_tasks(self) -> None:
         """Clears the listbox and re-populates it with tasks."""
@@ -87,14 +109,14 @@ class CalDavApp:
             return
 
         url, username, password, calendar_name = config
-        tasks = fetch_tasks(url, username, password, calendar_name)
+        self.task_objects = fetch_tasks(url, username, password, calendar_name)
 
         self.task_listbox.delete(0, tk.END)
-        if not tasks:
+        if not self.task_objects:
             self.task_listbox.insert(tk.END, "No tasks found.")
         else:
-            for task_name in tasks:
-                self.task_listbox.insert(tk.END, task_name)
+            for task in self.task_objects:
+                self.task_listbox.insert(tk.END, task.vobject_instance.vtodo.summary.value)
 
 
 if __name__ == "__main__":
