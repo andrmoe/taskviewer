@@ -21,11 +21,14 @@ def load_config() -> Optional[Tuple[str, str, str, str]]:
         return None
 
 
-def fetch_tasks(
-    url: str, username: str, password: str, calendar_name: str
-) -> List[Todo]:
+def fetch_tasks() -> List[Todo]:
     """Fetches task summaries from a specific CalDAV calendar."""
     tasks: List[Todo] = []
+    config = load_config()
+    if not config:
+        return []
+
+    url, username, password, calendar_name = config
     try:
         with caldav.DAVClient(
             url=url, username=username, password=password
@@ -58,7 +61,7 @@ def fetch_tasks(
 class CalDavApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("CalDAV Tasks")
+        self.root.title("Gjeremål")
         self.root.geometry("400x500")
         self.task_objects: [Todo] = []
         main_frame = ttk.Frame(self.root, padding="10")
@@ -70,10 +73,10 @@ class CalDavApp:
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(5, 0))
 
-        complete_button = ttk.Button(button_frame, text="Complete Selected Task", command=self.complete_task)
+        complete_button = ttk.Button(button_frame, text="Complete", command=self.complete_task)
         complete_button.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5,0))
         refresh_button = ttk.Button(
-            main_frame, text="Refresh Tasks", command=self.refresh_tasks
+            main_frame, text="Refresh", command=self.refresh_tasks
         )
         refresh_button.pack(fill=tk.X)
 
@@ -102,14 +105,7 @@ class CalDavApp:
         self.task_listbox.insert(tk.END, "Loading...")
         self.root.update_idletasks()
 
-        config = load_config()
-        if not config:
-            self.task_listbox.delete(0, tk.END)
-            self.task_listbox.insert(tk.END, "Error: config.ini not found or invalid.")
-            return
-
-        url, username, password, calendar_name = config
-        self.task_objects = fetch_tasks(url, username, password, calendar_name)
+        self.task_objects = fetch_tasks()
 
         self.task_listbox.delete(0, tk.END)
         if not self.task_objects:
